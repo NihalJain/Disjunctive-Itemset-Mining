@@ -1,5 +1,6 @@
 #!/usr/bin/env python
 # -*- coding: ascii -*-
+import sys
 
 """
 Algorithm to mine disjunctive frequent itemsets
@@ -43,14 +44,55 @@ __author__ = 'Nihal Jain (nihal.jain@iitg.ernet.in)'
 __version__ = '0.1'
 __date__ = '20160810'
 
+def main():
+    """ This is the  main runner function"""
+    # inputDatasetPath = sys.argv[1]
 
-#
-## Code goes here.
-#
+    # try to open the file and read its contents
+    try:
+        # prompt the user to enter the filepath of the given dataset
+        inputDatasetPath = input("Enter path to the input dataset: ")
 
-def test():
-    """ Testing Docstring"""
-    pass
+        # fp is a file object used to operate on the file
+        # we open the file in raed mode
+        fp = open(inputDatasetPath, "r")
 
-if __name__=='__main__':
-    test()
+        # reads the file until EOF using readline() and returns a list containing the lines
+        # and stores it in variable lines
+        lines = fp.readlines()
+
+        # close the file after reading is complete
+        fp.close()
+
+    # raise exception and exit if there is any read error or if file is not found
+    except IOError:
+        print("ERROR: file not found or unable to read data")
+        sys.exit(-1)
+
+    # read value of minimum support from user
+    try:
+        # prompt the user to enter a valid minimum support value
+        minSupp = float(input("Enter Support threshold (0 to 1): "))
+
+        # check if the input lies in the valid range
+        # exit if out of range
+        if minSupp > 1.0 or minSupp < 0:
+            print("ERROR: Invalid input for minimum support, out of range")
+            sys.exit(-1)
+
+    # raise exception and exit if input isn't a valid floating point number
+    except ValueError:
+        print("ERROR: Invalid input for minimum support, datatype error")
+        sys.exit(-1)
+
+    # raise exception and exit if input isn't a valid floating point number
+    except ValueError:
+        print("ERROR: Invalid input for minimum support, datatype error")
+        sys.exit(-1)
+
+    # process the file
+    for line in lines:
+        print(line)
+
+if __name__ == '__main__':
+    main()
