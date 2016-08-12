@@ -40,26 +40,29 @@ Algorithm to mine disjunctive frequent itemsets
 
 """
 
+from collections import defaultdict
+
 __author__ = 'Nihal Jain (nihal.jain@iitg.ernet.in)'
-__version__ = '0.1'
+__version__ = '0.2'
 __date__ = '20160810'
 
-def processDataset(filePath, minSupp, numeric):
-    """ Function to process the given dataset and generate a new dataset"""
+
+def processDataset(filePath, numeric):
+    """Function to process the given dataset and generate a list of lists containing transactions and their
+    corresponding items"""
+
+    # create a list to store the transactions present in the dataset
     transactions = []
 
     # try to open the file and read its contents
     try:
-        # prompt the user to enter the filepath of the given dataset
-        # inputDatasetPath = input("Enter path to the input dataset: ")
-
         # fp is a file object used to operate on the file
         # we open the file in raed mode
         fp = open(filePath, "r")
 
         # reads the file until EOF using readline() and returns a list containing the lines
-        # and stores it in variable lines
-        lines = fp.readlines()
+        # and stores it in variable dataset
+        dataset = fp.readlines()
 
         # close the file after reading is complete
         fp.close()
@@ -69,30 +72,113 @@ def processDataset(filePath, minSupp, numeric):
         print("ERROR: file not found or unable to read data")
         sys.exit(-1)
 
-    for line in lines:
+    # process each line in the dataset
+    for line in dataset:
+        # check if items are numerals
         if numeric:
+
+            # create a list to store the items present in a transaction
             transaction = []
+
+            # convert each item into an integer and append it to the transaction
             for item in line.split():
                 transaction.append(int(item))
+
+            # append the transaction to the list of transactions
             transactions.append(transaction)
+
+        # if items are not numerals
         else:
+            #  after splitting the line into a list of items, append the items list to the transaction list
             transactions.append(line.split())
 
+    # return the list of lists containing the transactions
     return transactions
 
-if __name__ == '__main__':
-    #main()
 
+def printTransactions(transactions):
+    """Function to print the transactions present in the list of lists containing the transactions"""
+    for transaction in transactions:
+        for item in transaction:
+            print(str(item)+" ", end="", flush=True)
+        print('.')
+
+
+def filterTransactions(transactions, minSupp, includeSupp=False):
+    """Function to filter out all items with support count less than minimum support. It returns a new list of
+     transactions containing only the items satisfying the minimum support threshold. Each newly created transaction,
+     within the list of transactions, stores items in a transaction ordered by frequency. Items with higher support
+     value come first in the item list of the transaction."""
+
+    # create a dictionary such that when a new key is encountered for the first time i.e. if it is already not there in
+    # the mapping, a new entry is automatically created using the default_factory function which returns 0.
+    itemsDict = defaultdict(lambda: 0)
+
+    # count the frequency of each item and increment it by 1 whenever it is encountered in a transaction
+    # a new key is created whenever an item is encountered for the first time, with its value set to 0
+    for transaction in transactions:
+        for item in transaction:
+            itemsDict[item] += 1
+
+    #print(itemsDict)
+
+    # create a new dictionary which contains only those items which have support count greater than or equal to minimum\
+    # support threshold
+    itemsDict = dict((item , support) for item, support in itemsDict.items()
+                 if support >= minSupp)
+
+    #print(itemsDict)
+
+    def cleanTransactions(transaction):
+        """Function to filter a transaction such that only those items remain which satisfy the minimum support
+        threshold and sort the items in a transaction based on their frequency, with items having higher support coming
+        first"""
+        # filter transaction and sustain only items which have an entry in the itemDict
+        transaction = list(filter(lambda v: v in itemsDict, transaction))
+
+        # sort the transaction containing a list of items in reverse order
+        transaction.sort(key=lambda v: itemsDict[v], reverse=True)
+
+        # return the new transaction
+        return transaction
+
+    # create a list to store the cleaned list of transactions
+    transactionsNew =  []
+
+    # map cleanTransactions function to each transaction present in the list of transactions
+    # i.e. clean each transaction
+    for transaction in map(cleanTransactions, transactions):
+        transactionsNew.append(transaction)
+
+    #printTransactions(transactionsNew)
+
+    # return the newly created cleaned list of transactions
+    return transactionsNew
+
+if __name__ == '__main__':
+    # import the OptionParser module which will be used to parse the options passed as argument
     from optparse import OptionParser
 
+    # initialise OptionParser object and pass a string which will be used to display usage
     opt = OptionParser(usage='%scriptName datasetPath')
+
+    # add an option for minimum support initialisation
     opt.add_option('-s','--minimum-support', dest='minSupp', type='int', help='Minimum itemset support (default = 2)')
+
+    # add an option to choose whether to use numbers to represent items
     opt.add_option('-n', '--numeric', dest='numeric', action='store_true', help='Convert the values in the dataset to '
                                                                                 'numerals (default = false)')
+    # set minimum support to 2, by default, if no option passed as  parameter
     opt.set_defaults(minSupp=2)
+
+    # set numeric to false, by default, if no option passed as parameter
     opt.set_defaults(numeric=False)
+
+    # parse the arguments passed to the program into options and args
     options, args = opt.parse_args()
 
+    # check if number of args is at least 1,
+    # if less display the error message
     if len(args) < 1:
         opt.error('ERROR: Must provide the path to a dataset file')
 
@@ -105,10 +191,16 @@ if __name__ == '__main__':
     print('Minimum Support Threshold: ' + str(options.minSupp))
     print('-------------------------------------------------------------------')
 
+    # create a list to store the transactions present in the dataset
     transactions = []
-    transactions = processDataset(args[0], options.minSupp, options.numeric)
 
-    for transaction in transactions:
-        for item in transaction:
-            print(str(item)+",")
-        print('.\n')
+    # process the dataset, and retrieve a list of lists containing a list of transactions and corresponding items
+    transactions = processDataset(args[0], options.numeric)
+
+    #printTransactions(transactions)
+
+    # create a list to store all the frequent itemsets
+    result = []
+
+    # process the list of transactions and generate a list of frequent itemsets
+    filterTransactions(transactions, options.minSupp)
