@@ -44,18 +44,18 @@ __author__ = 'Nihal Jain (nihal.jain@iitg.ernet.in)'
 __version__ = '0.1'
 __date__ = '20160810'
 
-def main():
-    """ This is the  main runner function"""
-    # inputDatasetPath = sys.argv[1]
+def processDataset(filePath, minSupp, numeric):
+    """ Function to process the given dataset and generate a new dataset"""
+    transactions = []
 
     # try to open the file and read its contents
     try:
         # prompt the user to enter the filepath of the given dataset
-        inputDatasetPath = input("Enter path to the input dataset: ")
+        # inputDatasetPath = input("Enter path to the input dataset: ")
 
         # fp is a file object used to operate on the file
         # we open the file in raed mode
-        fp = open(inputDatasetPath, "r")
+        fp = open(filePath, "r")
 
         # reads the file until EOF using readline() and returns a list containing the lines
         # and stores it in variable lines
@@ -69,30 +69,46 @@ def main():
         print("ERROR: file not found or unable to read data")
         sys.exit(-1)
 
-    # read value of minimum support from user
-    try:
-        # prompt the user to enter a valid minimum support value
-        minSupp = float(input("Enter Support threshold (0 to 1): "))
-
-        # check if the input lies in the valid range
-        # exit if out of range
-        if minSupp > 1.0 or minSupp < 0:
-            print("ERROR: Invalid input for minimum support, out of range")
-            sys.exit(-1)
-
-    # raise exception and exit if input isn't a valid floating point number
-    except ValueError:
-        print("ERROR: Invalid input for minimum support, datatype error")
-        sys.exit(-1)
-
-    # raise exception and exit if input isn't a valid floating point number
-    except ValueError:
-        print("ERROR: Invalid input for minimum support, datatype error")
-        sys.exit(-1)
-
-    # process the file
     for line in lines:
-        print(line)
+        if numeric:
+            transaction = []
+            for item in line.split():
+                transaction.append(int(item))
+            transactions.append(transaction)
+        else:
+            transactions.append(line.split())
+
+    return transactions
 
 if __name__ == '__main__':
-    main()
+    #main()
+
+    from optparse import OptionParser
+
+    opt = OptionParser(usage='%scriptName datasetPath')
+    opt.add_option('-s','--minimum-support', dest='minSupp', type='int', help='Minimum itemset support (default = 2)')
+    opt.add_option('-n', '--numeric', dest='numeric', action='store_true', help='Convert the values in the dataset to '
+                                                                                'numerals (default = false)')
+    opt.set_defaults(minSupp=2)
+    opt.set_defaults(numeric=False)
+    options, args = opt.parse_args()
+
+    if len(args) < 1:
+        opt.error('ERROR: Must provide the path to a dataset file')
+
+
+    print('-------------------------------------------------------------------')
+    print('     Disjunctive Frequent Itemset Mining: DFS Based Algorithm')
+    print('-------------------------------------------------------------------')
+    print('Parameters are as follows....')
+    print('Dataset File Path: ' + str(args[0]))
+    print('Minimum Support Threshold: ' + str(options.minSupp))
+    print('-------------------------------------------------------------------')
+
+    transactions = []
+    transactions = processDataset(args[0], options.minSupp, options.numeric)
+
+    for transaction in transactions:
+        for item in transaction:
+            print(str(item)+",")
+        print('.\n')
