@@ -1,6 +1,5 @@
 #!/usr/bin/env python
 # -*- coding: ascii -*-
-import sys
 
 """
 Algorithm to mine disjunctive frequent itemsets
@@ -40,11 +39,120 @@ Algorithm to mine disjunctive frequent itemsets
 
 """
 
+import sys
 from collections import defaultdict
 
 __author__ = 'Nihal Jain (nihal.jain@iitg.ernet.in)'
 __version__ = '0.2'
 __date__ = '20160810'
+
+
+class FPNode(object):
+    """Blueprint of a node in the FPTree"""
+
+    def __init__(self, tree, item, count=1):
+        """Function to initialise all the attributes of a FPTree node"""
+        self._tree = tree
+        self._item = item
+        self._count = count
+        self._parent = None
+        self._children = {}
+        self._neighbour = None
+
+    @property
+    def tree(self):
+        """Returns the tree in which this node is present"""
+        return self._tree
+
+    @property
+    def item(self):
+        """Returns the item represented by this node"""
+        return self._item
+
+    @property
+    def count(self):
+        """Returns the frequency of the item represented by this node"""
+        return self._count
+
+    @property
+    def parent(self):
+        """Returns the parent node of this node"""
+        return self._parent
+
+    @property
+    def children(self):
+        """Returns the nodes which are children of this node"""
+        return tuple(self._children.items())
+
+    @property
+    def neighbour(self):
+        """"Returns the node which is at the same depth and has the same node as parent and lies to the right of the
+        tree. Both the nodes have the same """
+        return self._neighbour
+
+    @parent.setter
+    def parent(self, parentNode):
+        """Function to set the parent node of this node"""
+        if parentNode is not None and not isinstance(parentNode, FPNode):
+            raise TypeError("The parent node of a node must be a FPNode")
+        if parentNode and parentNode.tree is not self.tree:
+            raise ValueError("The parent node of a node must belong to the same tree")
+        self._parent = parentNode
+
+    @neighbour.setter
+    def neighbour(self, neighbourNode):
+        """Function to set the neighbour node of this node"""
+        if neighbourNode is not None and not isinstance(neighbourNode, FPNode):
+            raise TypeError("The neighbour node of a node must be a FPNode")
+        if neighbourNode and neighbourNode.tree is not self.tree:
+            raise ValueError("The neighbour node of a node must belong to the same tree")
+        self._neighbour = neighbourNode
+
+    @property
+    def root(self):
+        """Return True if this node is the root node of the tree, otherwise False"""
+        return self._item is None and self._count is None
+
+    @property
+    def leaf(self):
+        """Return True if this node is a leaf node, otherwise False"""
+        return len(self._children) == 0
+
+    def increment(self):
+        """Function to increment the count of the item represented by this node"""
+        if self._count is None:
+            raise ValueError("No count value associated with the node")
+        self._count += 1
+
+    def searchChidren(self, item):
+        """Check whether this node has a node representing item as a child.
+        If yes, then return that node, otherwise return None"""
+        try:
+            return self._children[item]
+        except KeyError:
+            return None
+
+    def add(self, childNode):
+        """Function to add a node as child node of this node"""
+        if childNode is not None and not isinstance(childNode, FPNode):
+            raise TypeError("The child node of a node must be a FPNode")
+
+        if not childNode.item in self._children:
+            self._children[childNode.item] = childNode
+            childNode.parent = self
+
+    def __contains__(self, item):
+        return item in self._children
+
+    def inspect(self, depth=0):
+        print(('  ' * depth) + repr(self))
+        for child in self.children:
+            child.inspect(depth + 1)
+
+    def __repr__(self):
+        if self.root:
+            return "<%s (root)>" % type(self).__name__
+        return "<%s %r (%r)>" % (type(self).__name__, self.item, self.count)
 
 
 def processDataset(filePath, numeric):
@@ -92,6 +200,8 @@ def processDataset(filePath, numeric):
             #  after splitting the line into a list of items, append the items list to the transaction list
             transactions.append(line.split())
 
+    printTransactions(transactions)
+
     # return the list of lists containing the transactions
     return transactions
 
@@ -120,14 +230,14 @@ def filterTransactions(transactions, minSupp, includeSupp=False):
         for item in transaction:
             itemsDict[item] += 1
 
-    #print(itemsDict)
+    print(itemsDict)
 
     # create a new dictionary which contains only those items which have support count greater than or equal to minimum\
     # support threshold
     itemsDict = dict((item , support) for item, support in itemsDict.items()
                  if support >= minSupp)
 
-    #print(itemsDict)
+    print(itemsDict)
 
     def cleanTransactions(transaction):
         """Function to filter a transaction such that only those items remain which satisfy the minimum support
@@ -150,10 +260,11 @@ def filterTransactions(transactions, minSupp, includeSupp=False):
     for transaction in map(cleanTransactions, transactions):
         transactionsNew.append(transaction)
 
-    #printTransactions(transactionsNew)
+    printTransactions(transactionsNew)
 
     # return the newly created cleaned list of transactions
     return transactionsNew
+
 
 if __name__ == '__main__':
     # import the OptionParser module which will be used to parse the options passed as argument
@@ -196,8 +307,6 @@ if __name__ == '__main__':
 
     # process the dataset, and retrieve a list of lists containing a list of transactions and corresponding items
     transactions = processDataset(args[0], options.numeric)
-
-    #printTransactions(transactions)
 
     # create a list to store all the frequent itemsets
     result = []
