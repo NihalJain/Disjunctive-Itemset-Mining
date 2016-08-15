@@ -40,10 +40,10 @@ Algorithm to mine disjunctive frequent itemsets
 """
 
 import sys
-from collections import defaultdict
+from collections import defaultdict, namedtuple
 
 __author__ = 'Nihal Jain (nihal.jain@iitg.ernet.in)'
-__version__ = '0.2'
+__version__ = '0.3'
 __date__ = '20160810'
 
 
@@ -82,12 +82,11 @@ class FPNode(object):
     @property
     def children(self):
         """Returns the nodes which are children of this node"""
-        return tuple(self._children.items())
+        return tuple(self._children.values())
 
     @property
     def neighbour(self):
-        """"Returns the node which is at the same depth and has the same node as parent and lies to the right of the
-        tree. Both the nodes have the same """
+        """"Returns the node which is the next entry in the header table corresponding to a certain item"""
         return self._neighbour
 
     @parent.setter
@@ -95,6 +94,7 @@ class FPNode(object):
         """Function to set the parent node of this node"""
         if parentNode is not None and not isinstance(parentNode, FPNode):
             raise TypeError("The parent node of a node must be a FPNode")
+
         if parentNode and parentNode.tree is not self.tree:
             raise ValueError("The parent node of a node must belong to the same tree")
         self._parent = parentNode
@@ -104,6 +104,7 @@ class FPNode(object):
         """Function to set the neighbour node of this node"""
         if neighbourNode is not None and not isinstance(neighbourNode, FPNode):
             raise TypeError("The neighbour node of a node must be a FPNode")
+
         if neighbourNode and neighbourNode.tree is not self.tree:
             raise ValueError("The neighbour node of a node must belong to the same tree")
         self._neighbour = neighbourNode
@@ -118,13 +119,13 @@ class FPNode(object):
         """Return True if this node is a leaf node, otherwise False"""
         return len(self._children) == 0
 
-    def increment(self):
+    def incrementCount(self):
         """Function to increment the count of the item represented by this node"""
         if self._count is None:
             raise ValueError("No count value associated with the node")
         self._count += 1
 
-    def searchChidren(self, item):
+    def searchChildren(self, item):
         """Check whether this node has a node representing item as a child.
         If yes, then return that node, otherwise return None"""
         try:
@@ -132,7 +133,7 @@ class FPNode(object):
         except KeyError:
             return None
 
-    def add(self, childNode):
+    def addChild(self, childNode):
         """Function to add a node as child node of this node"""
         if childNode is not None and not isinstance(childNode, FPNode):
             raise TypeError("The child node of a node must be a FPNode")
@@ -153,6 +154,147 @@ class FPNode(object):
         if self.root:
             return "<%s (root)>" % type(self).__name__
         return "<%s %r (%r)>" % (type(self).__name__, self.item, self.count)
+
+
+class FPTree(object):
+    """
+    The blueprint of an FP Tree.
+    A FPTree will be used to store all the transactions in the database in condensed form. It may only store transaction
+    items that are hashable(i.e. all items must be a valid dictionary key or a set member)
+    """
+    Header = namedtuple('Header', 'head tail')
+
+    def __init__(self):
+        """Function to initialise all the attributes of a FPTree node"""
+        # this attribute stores the root node of the tree
+        self._root = FPNode(self, None, None)
+
+        # this attribute stores a dictionary which maps items to all the nodes containing that item stored as a path
+        # in the form of the head and tail of the path
+        self._header = {}
+
+    @property
+    def root(self):
+        """Returns the root node of the tree"""
+        return self._root
+
+    def addTransaction(self, transaction):
+        """Function to add a transaction to the FP Tree"""
+        # set the root of the tree as the current node
+        currNode = self.root
+
+        # for each item in the transaction
+        for item in transaction:
+            # search for a node representing the current item in the children list of the current node
+            # if found return that node, else return None
+            nextNode = currNode.searchChildren(item)
+
+            # if a node representing the current item exists in the children list of current node, we increment the
+            # count of that node by 1
+            if nextNode:
+                nextNode.incrementCount()
+
+            # if no such node exists
+            else:
+                # create a new FPNode representing the current item
+                nextNode = FPNode(self, item)
+
+                # add this new node as a children of the current node
+                currNode.addChild(nextNode)
+
+                # update the header table and add a new entry for this new node in it
+                self.updateHeader(nextNode)
+
+            # set the current node to be next node, and processs the next item in the transaction
+            currNode = nextNode
+
+    def updateHeader(self, node):
+        """Function to update the header table in order to add this node to the entry corresponding to the item
+        represented by this node"""
+
+        # the node should belong to the same tree as the tree represented by self
+        assert self is node.tree
+
+        # check if an entry exists for the item corresponding to the given node in the header table
+        try:
+            # if an entry exists, retrieve the header of this item
+            headerOfItem = self._header[node.item]
+
+            # set this node as the neighbour of the tail of the current path, represented by headerOfItem[1]
+            # (haed, tail) = headerOfItem
+            headerOfItem[1].neighbour = node
+
+            # update the tail of this path in the entry corresponding to this item in the header table
+            self._header[node.item] = self.Header(headerOfItem[0], node)
+
+        # if there is no entry for this item in the header table
+        # occurs when the item referenced in a transaction in the dataset for the first time
+        except KeyError:
+            # create a new header table entry corresponding to this item
+            # this node will act as both the head and the tail of this newly created path
+            self._header[node.item] = self.Header(node, node)
+
+    def nodes(self, item):
+        """Function to generate a list of nodes which contain the given item using the header table"""
+
+        # try if an entry exists corresponding to the given item
+        try:
+            # set the current node to be the head of the path stored in the header entry of that item
+            currNode = self._header[item][0]
+
+        # return if no entry exists
+        except KeyError:
+            return
+
+        # while tail is not reached
+        while currNode:
+            # generate the current node
+            yield currNode
+
+            # set the current node to be the next node of the path for that item
+            currNode = currNode.neighbour
+
+    def prefixPaths(self, item):
+        """Function to generate the prefix paths in the FP Tree that end with the given item"""
+
+        def collectPath(currNode):
+            """Function to build the path corresponding to the given node"""
+
+            # create an empty list which will be used to store the nodes in the path
+            path = []
+
+            # repeat while current node is not None and is not the root node of the FP Tree
+            # build the path in bottom up manner, from the bottom node to the root node
+            while currNode and not currNode.root:
+                # append the current node to the path
+                path.append(currNode)
+
+                # set the new current node to be the parent node of the current node
+                currNode = currNode.parent
+            # reverse the path to get the original prefix path
+            path.reverse()
+            return path
+
+        # for each node corresponding to the given item in the FP Tree, retrieve the prefix path for that node
+        return (collectPath(node) for node in self.nodes(item))
+
+    def items(self):
+        """Function to generate one 2-tuple corresponding to each item represented in the FP Tree. The first element in
+        the tuple is the item itself, while the second element is a generator which will yield all the nodes in the tree
+        that correspond to that item"""
+        for item in self._header.keys():
+            yield (item, self.nodes(item))
+
+    def inspect(self):
+        """Function to print the complete FP tree"""
+        print('FPTree')
+        self.root.inspect(1)
+
+        print('Routes')
+        for item, nodes in self.items():
+            print("     %r" % item)
+            for node in nodes:
+                print("     %r" % node)
 
 
 def processDataset(filePath, numeric):
@@ -266,6 +408,13 @@ def filterTransactions(transactions, minSupp, includeSupp=False):
     return transactionsNew
 
 
+def buildFPTree(transactions):
+    fpt = FPTree()
+    for transaction in transactions:
+        fpt.addTransaction(transaction)
+    # print("Done")
+    fpt.inspect()
+
 if __name__ == '__main__':
     # import the OptionParser module which will be used to parse the options passed as argument
     from optparse import OptionParser
@@ -312,4 +461,6 @@ if __name__ == '__main__':
     result = []
 
     # process the list of transactions and generate a list of frequent itemsets
-    filterTransactions(transactions, options.minSupp)
+    transactions = filterTransactions(transactions, options.minSupp)
+
+    buildFPTree(transactions)
