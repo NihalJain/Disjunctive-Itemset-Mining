@@ -1,4 +1,4 @@
-b d
+d b
 a
 b c d
 d

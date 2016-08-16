@@ -40,12 +40,13 @@ Algorithm to mine disjunctive frequent itemsets
 """
 
 import sys
-from collections import defaultdict, namedtuple
+from collections import defaultdict, namedtuple, OrderedDict
+from copy import deepcopy
+from operator import itemgetter
 
 __author__ = 'Nihal Jain (nihal.jain@iitg.ernet.in)'
 __version__ = '0.3'
 __date__ = '20160810'
-
 
 class FPNode(object):
     """Blueprint of a node in the FPTree"""
@@ -374,22 +375,30 @@ def filterTransactions(transactions, minSupp, includeSupp=False):
 
     print(itemsDict)
 
-    # create a new dictionary which contains only those items which have support count greater than or equal to minimum\
+    # create a new dictionary which contains only those items which have support count greater than or equal to minimum
     # support threshold
-    itemsDict = dict((item , support) for item, support in itemsDict.items()
-                 if support >= minSupp)
+#no filtering
+#    itemsDict = dict((item , support) for item, support in itemsDict.items()
+#                 if support >= minSupp)
 
-    print(itemsDict)
+    print("Item Dict:", itemsDict)
+
+    # order the dictionary based on the support of the items, use lexicographical order to break ties
+    itemsDictOrdered = OrderedDict(sorted(itemsDict.items(), key=itemgetter(1, 0), reverse=True))
+    print("Ordered Item Dict:", itemsDictOrdered)
+
+    itemsOrder = list(itemsDictOrdered.keys())
+    print("Items Order", itemsOrder)
 
     def cleanTransactions(transaction):
         """Function to filter a transaction such that only those items remain which satisfy the minimum support
         threshold and sort the items in a transaction based on their frequency, with items having higher support coming
         first"""
         # filter transaction and sustain only items which have an entry in the itemDict
-        transaction = list(filter(lambda v: v in itemsDict, transaction))
+        transaction = list(filter(lambda v: v in itemsDictOrdered, transaction))
 
-        # sort the transaction containing a list of items in reverse order
-        transaction.sort(key=lambda v: itemsDict[v], reverse=True)
+        # sort the transaction containing a list of items in items order
+        transaction.sort(key=lambda v: itemsOrder.index(v))
 
         # return the new transaction
         return transaction
@@ -405,7 +414,7 @@ def filterTransactions(transactions, minSupp, includeSupp=False):
     printTransactions(transactionsNew)
 
     # return the newly created cleaned list of transactions
-    return transactionsNew
+    return transactionsNew, itemsOrder
 
 
 def buildFPTree(transactions):
@@ -414,6 +423,71 @@ def buildFPTree(transactions):
         fpt.addTransaction(transaction)
     # print("Done")
     fpt.inspect()
+    return fpt
+
+def checkPath(itemList, i, X_node, tree, itemsOrder):
+    result = 0
+
+    if i >= 0:
+        Y_node = X_node.parent
+        while Y_node != tree.root:
+            if Y_node.item == itemList[i]:
+                result = 1
+                break
+            elif itemsOrder.index(Y_node.item) < itemsOrder.index(itemList[i]):
+                break
+            Y_node = Y_node.parent
+
+        if result != 1:
+            result = checkPath(itemList, i - 1, X_node, tree, itemsOrder)
+    else:
+        result = 0
+    return result
+
+
+def findSupport(newList, tree, itemsOrder):
+    sum = 0
+
+    for k in range(len(newList)):
+        X_node = tree._header[newList[k]][0]
+
+        while X_node != None:
+            temp = checkPath(newList, k - 1, X_node, tree, itemsOrder)
+            if temp == 0:
+                sum = sum + X_node.count
+            X_node = X_node.neighbour
+
+    return sum
+
+def generateItemsets(itemsList, start, end, depth, minSupp, fpt, itemsOrder):
+    i = start
+    while i >= end:
+        if depth == end + 1:
+            print("DONE!")
+            return
+
+        #list of integers
+        newList = deepcopy(itemsList)
+        #print(itemsList)
+        #print("Removed", i, itemsList[i])
+        newList.remove(itemsList[i])
+        #print("Modified", newList)
+
+        val = findSupport(newList, fpt, itemsOrder)
+        #print("REJ", newList, val)
+        if (val >= minSupp):
+            print("ACC", newList, val)
+            #countItemsets += 1
+            #frequent_list_set.add(set.toArray(new Integer[newlist.size()]));
+            generateItemsets(deepcopy(newList), i - 1, end, depth - 1, minSupp, fpt, itemsOrder)
+
+        i -= 1
+
+def findFrequentItemsets(fpt, itemsOrder, minSupp):
+    generateItemsets(itemsOrder, len(itemsOrder) - 1, 0, len(itemsOrder), minSupp, fpt, itemsOrder)
+
+    #print("Total candidates " + candidateItemset)
+    #print("Total " + countitemsets + " frequent ORed Itemsets found.")
 
 if __name__ == '__main__':
     # import the OptionParser module which will be used to parse the options passed as argument
@@ -461,6 +535,8 @@ if __name__ == '__main__':
     result = []
 
     # process the list of transactions and generate a list of frequent itemsets
-    transactions = filterTransactions(transactions, options.minSupp)
+    transactions, itemsOrder = filterTransactions(transactions, options.minSupp)
 
-    buildFPTree(transactions)
+    fpt = buildFPTree(transactions)
+
+    findFrequentItemsets(fpt, itemsOrder, options.minSupp)
