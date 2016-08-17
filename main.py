@@ -42,7 +42,8 @@ Algorithm to mine disjunctive frequent itemsets
 import sys
 from collections import defaultdict, namedtuple, OrderedDict
 from copy import deepcopy
-from operator import itemgetter
+from operator import itemgetter, attrgetter
+from queue import *
 
 __author__ = 'Nihal Jain (nihal.jain@iitg.ernet.in)'
 __version__ = '0.3'
@@ -51,7 +52,7 @@ __date__ = '20160810'
 class FPNode(object):
     """Blueprint of a node in the FPTree"""
 
-    def __init__(self, tree, item, count=1):
+    def __init__(self, tree, item, nodeID, count=1):
         """Function to initialise all the attributes of a FPTree node"""
         self._tree = tree
         self._item = item
@@ -59,6 +60,7 @@ class FPNode(object):
         self._parent = None
         self._children = {}
         self._neighbour = None
+        self._nodeID = nodeID
 
     @property
     def tree(self):
@@ -89,6 +91,11 @@ class FPNode(object):
     def neighbour(self):
         """"Returns the node which is the next entry in the header table corresponding to a certain item"""
         return self._neighbour
+
+    @property
+    def nodeID(self):
+        """"Returns the id of this node in the fp tree"""
+        return self._nodeID
 
     @parent.setter
     def parent(self, parentNode):
@@ -168,16 +175,28 @@ class FPTree(object):
     def __init__(self):
         """Function to initialise all the attributes of a FPTree node"""
         # this attribute stores the root node of the tree
-        self._root = FPNode(self, None, None)
+        self._root = FPNode(self, None, 0, None)
 
         # this attribute stores a dictionary which maps items to all the nodes containing that item stored as a path
         # in the form of the head and tail of the path
         self._header = {}
 
+        # a counter to keep track of number of nodes in this FPTree
+        self._nodesCount = 0
+
     @property
     def root(self):
         """Returns the root node of the tree"""
         return self._root
+
+    @property
+    def nodesCount(self):
+        """Returns the count of the total number of nodes in the tree"""
+        return self._nodesCount
+
+    def updateNodesCount(self):
+        """Function to increment the count of the number of nodes by 1"""
+        self._nodesCount += 1
 
     def addTransaction(self, transaction):
         """Function to add a transaction to the FP Tree"""
@@ -197,8 +216,11 @@ class FPTree(object):
 
             # if no such node exists
             else:
+                # update the counter for the number of nodes in the FP tree
+                self.updateNodesCount()
+
                 # create a new FPNode representing the current item
-                nextNode = FPNode(self, item)
+                nextNode = FPNode(self, item, self.nodesCount)
 
                 # add this new node as a children of the current node
                 currNode.addChild(nextNode)
@@ -343,7 +365,7 @@ def processDataset(filePath, numeric):
             #  after splitting the line into a list of items, append the items list to the transaction list
             transactions.append(line.split())
 
-    printTransactions(transactions)
+    #printTransactions(transactions)
 
     # return the list of lists containing the transactions
     return transactions
@@ -373,22 +395,29 @@ def filterTransactions(transactions, minSupp, includeSupp=False):
         for item in transaction:
             itemsDict[item] += 1
 
-    print(itemsDict)
+    # debug
+    #print(itemsDict)
 
     # create a new dictionary which contains only those items which have support count greater than or equal to minimum
     # support threshold
-#no filtering
+
+# commented for no filtering
 #    itemsDict = dict((item , support) for item, support in itemsDict.items()
 #                 if support >= minSupp)
 
-    print("Item Dict:", itemsDict)
+    # debug
+    #print("Item Dict:", itemsDict)
 
     # order the dictionary based on the support of the items, use lexicographical order to break ties
     itemsDictOrdered = OrderedDict(sorted(itemsDict.items(), key=itemgetter(1, 0), reverse=True))
-    print("Ordered Item Dict:", itemsDictOrdered)
+
+    # debug
+    #print("Ordered Item Dict:", itemsDictOrdered)
 
     itemsOrder = list(itemsDictOrdered.keys())
-    print("Items Order", itemsOrder)
+
+    # debug
+    #print("Items Order", itemsOrder)
 
     def cleanTransactions(transaction):
         """Function to filter a transaction such that only those items remain which satisfy the minimum support
@@ -411,87 +440,234 @@ def filterTransactions(transactions, minSupp, includeSupp=False):
     for transaction in map(cleanTransactions, transactions):
         transactionsNew.append(transaction)
 
-    printTransactions(transactionsNew)
+    # debug
+    #printTransactions(transactionsNew)
 
     # return the newly created cleaned list of transactions
     return transactionsNew, itemsOrder
 
 
 def buildFPTree(transactions):
-    fpt = FPTree()
+    """Function to build a fp tree from the given list of transactions"""
+
+    # initialise tree to be fp tree object
+    tree = FPTree()
+
+    # insert each transaction in the transaction list to the fp tree
     for transaction in transactions:
-        fpt.addTransaction(transaction)
-    # print("Done")
-    fpt.inspect()
-    return fpt
+        tree.addTransaction(transaction)
+
+    # debug : print the resulting fp tree
+    #tree.inspect()
+
+    # return the object storing the resulting fp tree
+    return tree
 
 def checkPath(itemList, i, X_node, tree, itemsOrder):
-    result = 0
+    """Function to check whether the given prefix paths contains an item of the itemset. Returns True when item is a part
+    of the given prefix path"""
 
+    # set found to be false
+    found = False
+
+    # check if at index is valid and corresponds to an item in the itemset
     if i >= 0:
+
+        # find the parent node of the gicen X_node
         Y_node = X_node.parent
+
+        # repeat while
         while Y_node != tree.root:
+            # check whether the item represented by current node is same as the item at index i in the given itemset
             if Y_node.item == itemList[i]:
-                result = 1
+
+                # if items are same, set found to be true
+                found = True
+
+                # break out of the current loop
                 break
+            # otherwise if the index of the item represented by Y_node in the items order is less than the order of the
+            # i item in that list
             elif itemsOrder.index(Y_node.item) < itemsOrder.index(itemList[i]):
+                # break
                 break
+
+            # set Y_node's parent to be the new Y_node
             Y_node = Y_node.parent
 
-        if result != 1:
-            result = checkPath(itemList, i - 1, X_node, tree, itemsOrder)
+        # if item not found, move to the parent of the current Y_node
+        if not found:
+            found = checkPath(itemList, i - 1, X_node, tree, itemsOrder)
     else:
-        result = 0
-    return result
+        # if not found, set found to false
+        found = False
+
+    # returns whether item found in the prefix path of the given node
+    return found
 
 
-def findSupport(newList, tree, itemsOrder):
-    sum = 0
+def findSupportByPrefixPath(newList, tree, itemsOrder):
+    """Function to find the support of given itemsets by using prefix path method"""
 
+    # initialise the support value to be 0
+    support = 0
+
+    # loop over each element in the itemset
     for k in range(len(newList)):
+
+        # set the x node to point to the head of x node in the header table
         X_node = tree._header[newList[k]][0]
 
+        # while we donot reach the root node
         while X_node != None:
-            temp = checkPath(newList, k - 1, X_node, tree, itemsOrder)
-            if temp == 0:
-                sum = sum + X_node.count
+
+            # check whether the given path has the given item in it
+            found = checkPath(newList, k - 1, X_node, tree, itemsOrder)
+
+            # if not found add the count of X_node to the support count
+            if not found:
+                support += X_node.count
+
+            # set the X_node's neighbour to be the new X_node
             X_node = X_node.neighbour
 
-    return sum
+    # return the support value of the given itemset
+    return support
 
-def generateItemsets(itemsList, start, end, depth, minSupp, fpt, itemsOrder):
+def findSupportByBFS(newList, tree):
+    """Function to calculate the support of the given itemset using the fp tree by traversing the fp tree in breadth
+    first order"""
+    # initialise the support to be  0
+    support = 0
+
+    # crteat an empty list which store true false depending on whether the node at index i has been visited by bfs
+    # search
+    visited = []
+
+    # make number of node + 1 elements in the list and set them to be false by default
+    for i in range(tree.nodesCount + 1):
+        visited.append(False)
+
+    # create an empty queue q
+    q = Queue(maxsize=0)
+
+    # set the first node i.e. the root node as visited
+    visited[0] = True
+
+    # push the root of the fp tree to the queue q
+    q.put(tree.root)
+
+    # repeat until the queue is not empty
+    while not q.empty():
+        # pop the queue and extract a node and make it the source node
+        srcNode = q.get()
+        #print("SRC:", srcNode.nodeID)
+
+        # set the children nodes to be a list of nodes which are the children of the source node
+        childrenNodes = srcNode.children
+
+        # sort the list of children based on their support counts, in order of decreasing supports, breaking ties by
+        # following lexicographical order
+        sorted(childrenNodes , key=attrgetter('item'), reverse=True)
+        sorted( childrenNodes , key=attrgetter('count'), reverse=True)
+
+        # process each node in the list of children nodes
+        for node in childrenNodes:
+
+            # set flag to be false meaning that the item has not been found
+            foundFlag = False
+
+            # if the current child node is not visited before
+            if not visited[node.nodeID]:
+                # for each item in the list of items in the items
+                for item in newList:
+                    # check whether the node represented by the current node equals the current item in the itemset
+                    if item == node.item:
+                        # if so, add the count of that node to the support value
+                        support += node.count
+
+                        # set flag to be true meaning that the item is found
+                        foundFlag = True
+
+                        # break the loop if node represents this item
+                        break
+
+                # if item is found, continue to the next iteration of the for loop
+                if foundFlag == True:
+                    continue
+
+                # set the current node to visited
+                visited[node.nodeID] = True
+                #print("Visited:", node.nodeID)
+
+                # put this node into the queue
+                q.put(node)
+
+    # after processing all the nodes in bfs order, return the support
+    return support
+
+def generateItemsets(itemsList, start, end, depth, minSupp, fpt, itemsOrder, freqItemsets):
+    """Function to find all the frequent itemset of the current itemset"""
+    # set i to be the start index
     i = start
+
+    # repeat while i lies between start and end (inclusive)
     while i >= end:
+        # if we are depth end + 1, return
         if depth == end + 1:
-            print("DONE!")
             return
 
-        #list of integers
+        #list of items in the current itemset
         newList = deepcopy(itemsList)
-        #print(itemsList)
-        #print("Removed", i, itemsList[i])
+
+        # debug
+        #print("Itemset before removal is: ", itemsList)
+
+        # remove item i from the current itemset
         newList.remove(itemsList[i])
-        #print("Modified", newList)
 
-        val = findSupport(newList, fpt, itemsOrder)
-        #print("REJ", newList, val)
+        # debug
+        #print("Removed item i: ", i, "Current itemset is: ",i temsList[i])
+
+        # find the support of current itemset
+        #val = findSupportByPrefixPath(newList, fpt, itemsOrder)
+        val = findSupportByBFS(newList, fpt)
+
+        # if support of current itemset is greater than minimum support
         if (val >= minSupp):
-            print("ACC", newList, val)
-            #countItemsets += 1
-            #frequent_list_set.add(set.toArray(new Integer[newlist.size()]));
-            generateItemsets(deepcopy(newList), i - 1, end, depth - 1, minSupp, fpt, itemsOrder)
+            # debug
+            #print("Added to frequent itemset list: ", newList, " With support: ", val)
 
+            # append this frequent item into the list of frequent items
+            freqItemsets.append({str(newList):val})
+
+            # generate the next itemset by decrementing the value of i and depth by 1
+            generateItemsets(deepcopy(newList), i - 1, end, depth - 1, minSupp, fpt, itemsOrder, freqItemsets)
+
+        # decrement the value of i by 1
         i -= 1
 
 def findFrequentItemsets(fpt, itemsOrder, minSupp):
-    generateItemsets(itemsOrder, len(itemsOrder) - 1, 0, len(itemsOrder), minSupp, fpt, itemsOrder)
+    """"Function to find all the frequent itemsets in the fp tree, which is a consdensed representation of the given
+    dataset"""
+    # create an empty list to store the set of frequent itemsets
+    freqItemsets = []
 
-    #print("Total candidates " + candidateItemset)
-    #print("Total " + countitemsets + " frequent ORed Itemsets found.")
+    # call generate itemsets function to find frequent itemsets
+    generateItemsets(itemsOrder, len(itemsOrder) - 1, 0, len(itemsOrder), minSupp, fpt, itemsOrder, freqItemsets)
+
+    print("Total " + str(len( freqItemsets)) + " frequent ORed Itemsets found.")
+
+    # return the list of all frequent itemsets
+    return freqItemsets
 
 if __name__ == '__main__':
-    # import the OptionParser module which will be used to parse the options passed as argument
+    import time
     from optparse import OptionParser
+    # import the OptionParser module which will be used to parse the options passed as argument
+
+    # start the timer
+    startTime = time.clock()
 
     # initialise OptionParser object and pass a string which will be used to display usage
     opt = OptionParser(usage='%scriptName datasetPath')
@@ -537,6 +713,15 @@ if __name__ == '__main__':
     # process the list of transactions and generate a list of frequent itemsets
     transactions, itemsOrder = filterTransactions(transactions, options.minSupp)
 
-    fpt = buildFPTree(transactions)
+    # build the fp tree for the passed list of transactions
+    tree = buildFPTree(transactions)
 
-    findFrequentItemsets(fpt, itemsOrder, options.minSupp)
+    # find frequent itemsets for the given tree
+    freqItemsets = findFrequentItemsets(tree, itemsOrder, options.minSupp)
+
+    # debug
+    #for itemset in freqItemsets:
+    #    print(itemset)
+
+    # end the timer and print the total execution time
+    print(time.clock() - startTime, "seconds")
