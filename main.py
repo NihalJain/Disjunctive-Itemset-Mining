@@ -630,8 +630,8 @@ def generateItemsets(itemsList, start, end, depth, minSupp, fpt, itemsOrder, fre
         #print("Removed item i: ", i, "Current itemset is: ",i temsList[i])
 
         # find the support of current itemset
-        #val = findSupportByPrefixPath(newList, fpt, itemsOrder)
-        val = findSupportByBFS(newList, fpt)
+        val = findSupportByPrefixPath(newList, fpt, itemsOrder)
+        #val = findSupportByBFS(newList, fpt)
 
         # if support of current itemset is greater than minimum support
         if (val >= minSupp):
